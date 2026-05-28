@@ -1,0 +1,45 @@
+// Secure Dev Container — see README.md for the security model.
+// Format: https://aka.ms/devcontainer.json
+{
+	"name": "Secure Dev Container",
+
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces",
+
+	// Run as the image's non-root `node` user (uid 1000) rather than root, so an
+	// agent in no-permissions mode isn't operating as root inside the container.
+	"remoteUser": "node",
+	// Skip the startup uid remap: with `cap_drop: ALL` the remap's chown can't
+	// run, and Docker Desktop (macOS) exposes bind mounts as accessible
+	// regardless of uid.
+	"updateRemoteUserUID": false,
+
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {
+			"installDirectlyFromGitHubRelease": true,
+			"version": "latest"
+		},
+		"ghcr.io/devcontainers/features/node:2": {
+			"nodeGypDependencies": true,
+			"version": "lts",
+			"npmVersion": "latest",
+			"pnpmVersion": "latest",
+			"nvmVersion": "latest"
+		},
+		"ghcr.io/devcontainer-config/features/dot-config:4": {}
+	},
+
+	// Install Claude Code on first create. Append your project's install step
+	// after `&&` — for example:
+	//   "npm install && npm install -g @anthropic-ai/claude-code"
+	//   "pip install -r requirements.txt && npm install -g @anthropic-ai/claude-code"
+	"postCreateCommand": "npm install -g @anthropic-ai/claude-code"
+
+	// To auto-start a dev server on every container start, uncomment and adapt.
+	// Backgrounded with nohup so it doesn't block VS Code's connection.
+	// "postStartCommand": "nohup npm run dev > /tmp/dev.log 2>&1 &"
+
+	// Forward additional container ports to the host if your project needs it:
+	// "forwardPorts": [3000]
+}

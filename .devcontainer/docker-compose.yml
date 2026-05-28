@@ -1,0 +1,62 @@
+services:
+  app:
+    # Build the standalone .devcontainer/Dockerfile. Paths are relative to THIS
+    # file, so `context: .` = `.devcontainer/`.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: devcontainer
+
+    # Hardening for running autonomous agents (no-permissions mode): block
+    # privilege escalation and drop all Linux capabilities (Node dev needs none).
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      # Needed ONLY by init-firewall.sh at startup to program iptables/ipset.
+      # The non-root `node` user the agent runs as cannot use these caps.
+      - NET_ADMIN
+      - NET_RAW
+
+    volumes:
+      # Mount ONLY the host project (parent of .devcontainer/) at /workspaces.
+      # Keeps an agent's blast radius to this one repo — sibling projects and
+      # loose secrets in the parent dir are NOT exposed to the container.
+      - ..:/workspaces:cached
+      # Persist Claude Code's login/config across rebuilds so you only
+      # `claude login` once. Pre-created node-owned in the Dockerfile so this
+      # volume inits writable.
+      - claude-config:/home/node/.claude
+
+    # If your project's dev server needs to be reachable from the host, expose
+    # the port here. The egress firewall does not affect inbound to local dev.
+    # ports:
+    #   - "3000:3000"
+
+    # Run the egress allowlist firewall as root (PID 1 holds NET_ADMIN), then
+    # idle. `; exec` (not `&&`) keeps the container up even if the firewall
+    # script errors, so you can always attach to debug. VS Code attaches over
+    # Docker's exec channel, which the firewall does not affect.
+    command: ["/bin/sh", "-c", "/usr/local/bin/init-firewall.sh || echo '[init-firewall] FAILED'; exec sleep infinity"]
+
+    # To pull in additional services (DB, cache, etc.), add them below and
+    # reference them as depends_on. Example:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+
+  # Example sidecar — uncomment and adapt for your stack.
+  # postgres:
+  #   image: postgres:16
+  #   environment:
+  #     POSTGRES_PASSWORD: dev
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD", "pg_isready", "-U", "postgres"]
+  #     interval: 5s
+
+volumes:
+  claude-config:
+  # pg-data:
