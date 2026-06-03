@@ -100,11 +100,25 @@ fi
 ipset create allowed-domains hash:net
 
 # GitHub publishes its CIDR ranges; pull them so all of git/gh works reliably.
+# Without these, only the A records resolved for github.com / api.github.com
+# / codeload.github.com / etc. land in the ipset — and GitHub's edge serves
+# api.github.com from rotating IPs that quickly drift out of that snapshot,
+# so within minutes `gh api`, `npx <gh-package>`, etc. start failing.
+#
+# The prefix-length match is bounded to /0–/32 on purpose: after `tr -d ' ",'`
+# strips quotes/commas from the JSON, consecutive CIDRs run together
+# (e.g. `192.30.252.0/22185.199.108.0/22`). An unbounded `[0-9]+` greedy-
+# matches across that boundary and produces garbage like `.../3113`, which
+# `ipset add` silently rejects — net effect: zero CIDRs loaded. Bounding the
+# prefix forces the match to terminate at /XX.
 if gh_meta=$(curl -fsS --max-time 10 https://api.github.com/meta 2>/dev/null); then
-  echo "$gh_meta" | tr -d ' ",' \
-    | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+' | sort -u \
-    | while read -r cidr; do ipset add allowed-domains "$cidr" 2>/dev/null || true; done
-  log "added GitHub IP ranges from api.github.com/meta"
+  added=0
+  while read -r cidr; do
+    ipset add allowed-domains "$cidr" 2>/dev/null && added=$((added + 1))
+  done <<EOF
+$(echo "$gh_meta" | tr -d ' ",' | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/(3[0-2]|[12]?[0-9])' | sort -u)
+EOF
+  log "added $added GitHub IP ranges from api.github.com/meta"
 else
   log "WARN: could not fetch GitHub meta ranges (falling back to A records below)"
 fi
