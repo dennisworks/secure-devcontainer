@@ -1,9 +1,14 @@
 services:
   app:
-    # Build the standalone .devcontainer/Dockerfile. Paths are relative to THIS
-    # file, so `context: .` = `.devcontainer/`.
+    # Build the standalone .devcontainer/Dockerfile.
+    # IMPORTANT: paths here are resolved against the PROJECT directory (the
+    # workspace root), not against this file's own dir — VS Code Dev Containers
+    # invokes compose with --project-directory=<workspace>. So the context has
+    # to be the explicit `./.devcontainer` subpath, not just `.`. With context
+    # = .devcontainer/, the Dockerfile's `COPY init-firewall.sh` resolves
+    # locally and the whole sandbox folder stays self-contained.
     build:
-      context: .
+      context: ./.devcontainer
       dockerfile: Dockerfile
       target: devcontainer
 
@@ -20,10 +25,12 @@ services:
       - NET_RAW
 
     volumes:
-      # Mount ONLY the host project (parent of .devcontainer/) at /workspaces.
-      # Keeps an agent's blast radius to this one repo — sibling projects and
-      # loose secrets in the parent dir are NOT exposed to the container.
-      - ..:/workspaces:cached
+      # Mount ONLY the host project (the workspace root) at /workspaces.
+      # `.` resolves to the workspace root because that's the project
+      # directory VS Code passes to compose. Using `..` here would mount the
+      # PARENT directory and expose every sibling repo + any loose secrets,
+      # defeating the sandbox.
+      - .:/workspaces:cached
       # Persist Claude Code's login/config across rebuilds so you only
       # `claude login` once. Pre-created node-owned in the Dockerfile so this
       # volume inits writable.
