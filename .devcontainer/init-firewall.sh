@@ -45,6 +45,28 @@ ALLOWED_DOMAINS=(
   # sum.golang.org
 )
 
+# --- Wait for eth0 to attach ----------------------------------------------
+# Docker can start the container's command BEFORE the network namespace's
+# veth pair is fully set up — especially on Docker Desktop for Mac, and
+# especially for single-service compose projects with no `depends_on` to give
+# the network time to warm. Without this wait, the `dig` calls below would
+# fail with no A records, the ipset would be empty, default-deny would lock
+# the container down with nothing allowlisted, and you'd get cryptic
+# EAI_AGAIN errors from npm/curl/etc. for the rest of the container's life.
+log "waiting for eth0 to come up..."
+for i in $(seq 1 30); do
+  if ip -4 addr show eth0 2>/dev/null | grep -q 'inet '; then
+    log "eth0 up after ~$(awk "BEGIN { printf \"%.1f\", $i * 0.5 }")s"
+    break
+  fi
+  sleep 0.5
+done
+if ! ip -4 addr show eth0 2>/dev/null | grep -q 'inet '; then
+  log "ERROR: eth0 never came up — Docker likely failed to attach the network"
+  log "       (commonly a port-bind conflict on the host). Applying default-deny"
+  log "       anyway; fix the underlying issue and rebuild the container."
+fi
+
 # --- Reset the filter table only ------------------------------------------
 # Do NOT flush nat/mangle: Docker's embedded-DNS redirect for 127.0.0.11 lives
 # in this container's nat table, and flushing it breaks all name resolution.
