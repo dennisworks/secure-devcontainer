@@ -55,6 +55,8 @@ ALLOWED_DOMAINS=(
 # of which are heavier than the threat model warrants for local dev.
 ALLOWED_DOMAINS_WIDE=(
   # mcp.vercel.com            # Vercel MCP server (Claude Code vercel-plugin)
+  # vercel.com                # Vercel OAuth (authorize + token exchange during MCP login)
+  # api.vercel.com            # Vercel REST API (read by MCP server + some plugin commands)
 )
 
 # --- Wait for eth0 to attach ----------------------------------------------
