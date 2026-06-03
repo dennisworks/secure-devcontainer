@@ -43,6 +43,17 @@ ALLOWED_DOMAINS=(
   # static.crates.io
   # proxy.golang.org          # Go
   # sum.golang.org
+)
+
+# Hosts on rotating CDN/anycast IPs. The per-host A-record snapshot above
+# captures one or two edge IPs at firewall init, but the CDN keeps shifting
+# new requests around within a /24 block — connections from inside the
+# container then go to a sibling IP that isn't in the ipset and silently
+# time out. For these hosts, allowlist the whole /24 around each resolved
+# IP so near-term rotation is covered. Over-broad, but the alternative is
+# either (a) re-resolving constantly, or (b) a DNS-aware egress proxy, both
+# of which are heavier than the threat model warrants for local dev.
+ALLOWED_DOMAINS_WIDE=(
   # mcp.vercel.com            # Vercel MCP server (Claude Code vercel-plugin)
 )
 
@@ -134,6 +145,23 @@ for domain in "${ALLOWED_DOMAINS[@]}"; do
   fi
   for ip in $ips; do ipset add allowed-domains "$ip" 2>/dev/null || true; done
   log "allowed $domain"
+done
+
+# Same idea, but for ALLOWED_DOMAINS_WIDE: take each resolved IP and add its
+# /24 prefix to cover CDN rotation within the same edge block.
+for domain in "${ALLOWED_DOMAINS_WIDE[@]:-}"; do
+  [ -z "$domain" ] && continue
+  ips=$(dig +short A "$domain" 2>/dev/null \
+    | grep -oE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true)
+  if [ -z "$ips" ]; then
+    log "WARN: no A record for $domain (wide)"
+    continue
+  fi
+  for ip in $ips; do
+    cidr=$(echo "$ip" | awk -F. '{print $1"."$2"."$3".0/24"}')
+    ipset add allowed-domains "$cidr" 2>/dev/null || true
+  done
+  log "allowed $domain (with /24 prefix)"
 done
 
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
