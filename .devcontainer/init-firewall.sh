@@ -43,6 +43,7 @@ ALLOWED_DOMAINS=(
   # static.crates.io
   # proxy.golang.org          # Go
   # sum.golang.org
+  # mcp.vercel.com            # Vercel MCP server (Claude Code vercel-plugin)
 )
 
 # --- Wait for eth0 to attach ----------------------------------------------
