@@ -46,7 +46,7 @@ services:
     #   postgres:
     #     condition: service_healthy
 
-  # Example sidecar — uncomment and adapt for your stack.
+  # Example sidecars — uncomment one (or more) and adapt for your stack.
   # postgres:
   #   image: postgres:16
   #   environment:
@@ -57,6 +57,24 @@ services:
   #     test: ["CMD", "pg_isready", "-U", "postgres"]
   #     interval: 5s
 
+  # MongoDB as a single-node replica set. Prisma's Mongo provider REQUIRES a
+  # replica set, so this runs `--replSet rs0` and the healthcheck initiates
+  # rs0 on first boot, then reports healthy once primary. Drop the replSet
+  # bits if you're using the native driver and don't need transactions.
+  # mongo:
+  #   image: mongo:7
+  #   restart: unless-stopped
+  #   command: ["--replSet", "rs0", "--bind_ip_all"]
+  #   volumes:
+  #     - mongo-data:/data/db
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "mongosh --quiet --eval \"try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }\""]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 12
+  #     start_period: 20s
+
 volumes:
   claude-config:
   # pg-data:
+  # mongo-data:
