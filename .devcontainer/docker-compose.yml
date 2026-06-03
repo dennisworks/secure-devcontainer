@@ -1,14 +1,19 @@
 services:
   app:
     # Build the standalone .devcontainer/Dockerfile.
-    # IMPORTANT: paths here are resolved against the PROJECT directory (the
-    # workspace root), not against this file's own dir — VS Code Dev Containers
-    # invokes compose with --project-directory=<workspace>. So the context has
-    # to be the explicit `./.devcontainer` subpath, not just `.`. With context
-    # = .devcontainer/, the Dockerfile's `COPY init-firewall.sh` resolves
-    # locally and the whole sandbox folder stays self-contained.
+    # Path-resolution rule: this is a single-file devcontainer (devcontainer.json
+    # references just this compose file), so VS Code Dev Containers and `docker
+    # compose -f docker-compose.yml` invoked from this folder both resolve
+    # relative paths against THIS file's own directory (.devcontainer/).
+    # So `context: .` correctly points at .devcontainer/ — the Dockerfile and
+    # init-firewall.sh both live there.
+    #
+    # If you ever switch to multi-file (e.g. extending a workspace-root
+    # docker-compose.yml), the resolution base shifts to the workspace root
+    # because compose's default project-directory = first -f file's dir. In
+    # that case use `context: ./.devcontainer` instead.
     build:
-      context: ./.devcontainer
+      context: .
       dockerfile: Dockerfile
       target: devcontainer
 
@@ -25,12 +30,12 @@ services:
       - NET_RAW
 
     volumes:
-      # Mount ONLY the host project (the workspace root) at /workspaces.
-      # `.` resolves to the workspace root because that's the project
-      # directory VS Code passes to compose. Using `..` here would mount the
-      # PARENT directory and expose every sibling repo + any loose secrets,
-      # defeating the sandbox.
-      - .:/workspaces:cached
+      # Mount ONLY the host project (workspace root, parent of .devcontainer/)
+      # at /workspaces. With path-resolution base = this file's own dir, `..`
+      # correctly points one level up = the workspace root. Keeps an agent's
+      # blast radius to this one repo — sibling projects and loose secrets in
+      # the parent dir are NOT exposed to the container.
+      - ..:/workspaces:cached
       # Persist Claude Code's login/config across rebuilds so you only
       # `claude login` once. Pre-created node-owned in the Dockerfile so this
       # volume inits writable.
