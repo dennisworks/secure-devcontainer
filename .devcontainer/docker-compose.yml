@@ -28,6 +28,27 @@ services:
       # The non-root `node` user the agent runs as cannot use these caps.
       - NET_ADMIN
       - NET_RAW
+      # Uncomment ONLY if you extend the `command` below to drop from root →
+      # node with `su node -c '...'` (e.g. to launch a dev server as node).
+      # `su` calls setgroups()/setgid()/setuid(), which require CAP_SETGID /
+      # CAP_SETUID even for root — under cap_drop: ALL these fail with "su:
+      # cannot set groups: Operation not permitted". After the entrypoint
+      # drops to node, these caps are idle for the rest of container life and
+      # the agent (running as node) never inherits them.
+      # - SETGID
+      # - SETUID
+
+    # Uncomment ONLY if your host is Linux (or you're on macOS but Docker
+    # Desktop's bind-mount uid remap isn't kicking in for you — symptom is
+    # files inside the container showing host uid 501 instead of `node`).
+    # Adds the host's file-owner gid as a supplementary group on the
+    # container's `node` user, so files on the host bind mount that are mode
+    # 664 (group-writable) are writable from inside the container. Default
+    # 20 is macOS's `staff` group; on Linux set HOST_GID in .env to whatever
+    # `stat -c %g <a-host-file>` returns. Paired with `chmod g+w` on the
+    # specific files you need to write (typically package.json, lockfiles).
+    # group_add:
+    #   - "${HOST_GID:-20}"
 
     volumes:
       # Mount ONLY the host project (workspace root, parent of .devcontainer/)
@@ -40,6 +61,19 @@ services:
       # `claude login` once. Pre-created node-owned in the Dockerfile so this
       # volume inits writable.
       - claude-config:/home/node/.claude
+      # Optional: isolate generated/installed directories from the host bind
+      # mount with named volumes. Why you'd want this:
+      #   (a) prevents wrong-platform binaries from a host `npm install`
+      #       (darwin) contaminating what the Linux container uses
+      #   (b) speeds up I/O (named volumes are native FS; bind mounts are
+      #       virtualized through Docker Desktop's file-sharing layer)
+      #   (c) sidesteps EACCES on `npm ci`/`pip install` if your host's bind-
+      #       mount uid mapping doesn't show files as node-owned
+      # The Dockerfile chowns /workspaces to node at build time so these
+      # volumes initialize node-owned on first mount. Mirror this pattern for
+      # any other write-heavy generated dirs (e.g. /workspaces/.next,
+      # /workspaces/generated, /workspaces/target, /workspaces/.venv).
+      # - workspaces-node-modules:/workspaces/node_modules
 
     # If your project's dev server needs to be reachable from the host, expose
     # the port here. The egress firewall does not affect inbound to local dev.
@@ -88,5 +122,6 @@ services:
 
 volumes:
   claude-config:
+  # workspaces-node-modules:
   # pg-data:
   # mongo-data:

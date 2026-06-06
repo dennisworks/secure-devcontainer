@@ -45,3 +45,14 @@ ENV DISABLE_AUTOUPDATER=1
 RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
 
 WORKDIR /workspaces
+
+# Pre-chown the workspace root so any named volumes you mount underneath
+# /workspaces (e.g. /workspaces/node_modules, /.next, /generated — see the
+# commented patterns in .devcontainer/docker-compose.yml) initialize as
+# node-owned. Without this, Docker creates a new named volume with the image
+# directory's ownership — `/workspaces` is root-owned by default (WORKDIR
+# inherits from root), so volumes init root-owned and the non-root `node`
+# user can't write into them (EACCES on first `npm ci` / `pip install` /
+# etc.). At runtime `cap_drop: ALL` removes CHOWN, so this has to happen at
+# build time.
+RUN chown -R node:node /workspaces

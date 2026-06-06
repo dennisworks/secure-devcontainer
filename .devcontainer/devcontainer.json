@@ -11,8 +11,12 @@
 	// agent in no-permissions mode isn't operating as root inside the container.
 	"remoteUser": "node",
 	// Skip the startup uid remap: with `cap_drop: ALL` the remap's chown can't
-	// run, and Docker Desktop (macOS) exposes bind mounts as accessible
-	// regardless of uid.
+	// run. On macOS Docker Desktop, this is usually fine — the file-sharing
+	// layer typically exposes bind-mount files as owned by the container user,
+	// so `node` can read/write them. On Linux (and occasionally macOS, e.g.
+	// under VirtioFS with certain settings), files appear with the host uid
+	// and `node` may be unable to write — see the commented `group_add` /
+	// named-volume patterns in docker-compose.yml for the fallback.
 	"updateRemoteUserUID": false,
 
 	"features": {

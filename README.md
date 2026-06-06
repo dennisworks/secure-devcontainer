@@ -79,15 +79,44 @@ iptables -L 2>&1                  # should: "Permission denied" (no NET_ADMIN)
 
 ## Notes
 
-- macOS Docker Desktop exposes bind mounts as accessible regardless of uid, so
-  `updateRemoteUserUID: false` is safe and avoids a startup chown that would
-  fail under `cap_drop: ALL`.
+- `updateRemoteUserUID: false` skips the dev container startup uid remap (its
+  chown can't run under `cap_drop: ALL`). On macOS Docker Desktop the file-
+  sharing layer usually exposes bind-mount files as owned by the container's
+  `node` user, so writes from the agent work fine. On Linux (and sometimes
+  macOS under specific Docker Desktop settings), files appear at the host uid
+  and `node` may hit EACCES on writes — see the next bullet.
 - `init-firewall.sh` allowlists the IPs each domain resolves to **at startup**.
   CDN-backed hosts can rotate IPs; if a normally-allowed host starts failing,
   rebuild the container (or re-run the script as root) to re-resolve.
 - Claude Code's auto-updater is disabled in the sandbox via
   `DISABLE_AUTOUPDATER=1` so the pinned version inside the container can't
   drift mid-session.
+
+## Gotchas (and what to uncomment when you hit them)
+
+All of these are documented inline in `.devcontainer/docker-compose.yml`; this
+section is a map to find the right comment block.
+
+- **`EACCES` on `npm install` / `pip install` writing into the workspace.**
+  Your bind-mount uid mapping isn't showing files as `node`-owned. Two
+  options:
+  - Move write-heavy generated dirs (`node_modules`, `.next`, `.venv`,
+    `target`) into named volumes — see the commented `workspaces-node-modules`
+    example. Cleanest, and also avoids wrong-platform binaries from a host
+    install contaminating the container.
+  - For the `package.json` / lockfiles you must write through the bind mount,
+    uncomment the `group_add: ["${HOST_GID:-20}"]` block and `chmod g+w` the
+    affected files on the host.
+- **`su: cannot set groups: Operation not permitted`** when you extend the
+  entrypoint with `su node -c '...'` to drop privileges before launching a
+  dev server. Uncomment the `- SETGID` / `- SETUID` lines in `cap_add` —
+  those caps are needed for `su` to call `setgroups()`/`setuid()` even from
+  root under `cap_drop: ALL`. They're held by PID 1 only and don't leak to
+  the agent.
+- **Sibling-project secrets leaking into the container.** Don't change
+  `..:/workspaces:cached` to `../..:/workspaces` or similar — the whole
+  point of the `..` mount is that it's exactly the workspace root. If you
+  need files outside it, mount them in explicitly with `:ro`.
 
 ## License
 
